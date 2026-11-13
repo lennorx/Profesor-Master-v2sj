@@ -1112,19 +1112,19 @@ def is_valid_session_id(sid: str) -> bool:
 
 
 def _session_owner(session_id: str) -> tuple[bool, str | None]:
-    """(există, etti_user_id) pentru o sesiune. La eroare: (False, None)."""
+    """(există, liceu_user_id) pentru o sesiune. La eroare: (False, None)."""
     try:
         supabase = get_supabase_client()
         response = (
             supabase.table("sessions")
-            .select("session_id, etti_user_id")
+            .select("session_id, liceu_user_id")
             .eq("session_id", session_id)
             .limit(1)
             .execute()
         )
         if not response.data:
             return False, None
-        return True, response.data[0].get("etti_user_id")
+        return True, response.data[0].get("liceu_user_id")
     except Exception:
         return False, None
 
@@ -1149,7 +1149,7 @@ def register_session(session_id: str):
         }
         _uid = current_user_id()
         if _uid:
-            row["etti_user_id"] = _uid   # conversația aparține contului → apare pe toate device-urile
+            row["liceu_user_id"] = _uid   # conversația aparține contului → apare pe toate device-urile
         # ignore_duplicates: o sesiune existentă NU e suprascrisă (nici proprietarul, nici created_at)
         client.table("sessions").upsert(row, ignore_duplicates=True).execute()
     except Exception as e:
@@ -1158,7 +1158,7 @@ def register_session(session_id: str):
 
 # === AUTENTIFICARE OPȚIONALĂ (cont elev) ===
 # Fără cont: aplicația merge ca înainte (conversațiile stau în acest browser).
-# Cu cont: conversațiile sunt legate de cont (sessions.etti_user_id) și apar pe orice device.
+# Cu cont: conversațiile sunt legate de cont (sessions.liceu_user_id) și apar pe orice device.
 # „Ține-mă minte”: un token aleator stă în localStorage-ul browserului; în DB păstrăm doar
 # hash-ul lui (sha256), deci o scurgere a bazei nu permite logarea. Parolele: scrypt (stdlib).
 AUTH_TOKEN_DAYS = 180
@@ -1242,12 +1242,12 @@ def auth_register(email: str, password: str, display_name: str = "") -> tuple[di
     if client is None:
         return None, "Baza de date nu e disponibilă acum. Încearcă mai târziu."
     try:
-        exists = client.table("etti_users").select("id").eq("email", email).limit(1).execute()
+        exists = client.table("liceu_users").select("id").eq("email", email).limit(1).execute()
         if exists.data:
             return None, "Există deja un cont cu acest email. Folosește „Intră în cont”."
         now = time.time()
         _rec = _new_recovery_code()
-        res = client.table("etti_users").insert({
+        res = client.table("liceu_users").insert({
             "email": email,
             "password_hash": _hash_password(password),
             "recovery_hash": _hash_password(_normalize_recovery(_rec)),
@@ -1270,7 +1270,7 @@ def auth_login(email: str, password: str) -> tuple[dict | None, str]:
     if client is None:
         return None, "Baza de date nu e disponibilă acum. Încearcă mai târziu."
     try:
-        res = client.table("etti_users").select("id, email, display_name, password_hash") \
+        res = client.table("liceu_users").select("id, email, display_name, password_hash") \
             .eq("email", email).limit(1).execute()
     except Exception as e:
         _log("Autentificare: eroare DB", "silent", e)
@@ -1280,7 +1280,7 @@ def auth_login(email: str, password: str) -> tuple[dict | None, str]:
         _auth_note_fail(email)
         return None, "Email sau parolă greșită."
     try:
-        client.table("etti_users").update({"last_login": time.time()}).eq("id", row["id"]).execute()
+        client.table("liceu_users").update({"last_login": time.time()}).eq("id", row["id"]).execute()
     except Exception:
         pass
     return _public_user(row), ""
@@ -1363,13 +1363,13 @@ def auth_request_reset_email(email: str) -> tuple[bool, str]:
     if client is None:
         return False, "Baza de date nu e disponibilă acum. Încearcă mai târziu."
     try:
-        res = client.table("etti_users").select("id").eq("email", email).limit(1).execute()
+        res = client.table("liceu_users").select("id").eq("email", email).limit(1).execute()
         if not res.data:
             return True, generic
         uid = res.data[0]["id"]
         code = f"{secrets.randbelow(10 ** 6):06d}"
         now = time.time()
-        client.table("etti_password_resets").upsert({
+        client.table("liceu_password_resets").upsert({
             "user_id": uid, "code_hash": _reset_code_hash(uid, code),
             "expires_at": now + RESET_CODE_MINUTES * 60, "attempts": 0, "created_at": now,
         }).execute()
@@ -1399,7 +1399,7 @@ def auth_reset_password(email: str, code: str, new_password: str) -> tuple[dict 
     if client is None:
         return None, "Baza de date nu e disponibilă acum. Încearcă mai târziu."
     try:
-        res = client.table("etti_users").select("id, email, display_name, recovery_hash") \
+        res = client.table("liceu_users").select("id, email, display_name, recovery_hash") \
             .eq("email", email).limit(1).execute()
         row = res.data[0] if res.data else None
         if not row:
@@ -1408,13 +1408,13 @@ def auth_reset_password(email: str, code: str, new_password: str) -> tuple[dict 
         uid = row["id"]
         used_recovery = False
         if re.fullmatch(r"\d{6}", code):
-            r = client.table("etti_password_resets").select("code_hash, expires_at, attempts") \
+            r = client.table("liceu_password_resets").select("code_hash, expires_at, attempts") \
                 .eq("user_id", uid).limit(1).execute()
             rr = r.data[0] if r.data else None
             if (not rr or rr["expires_at"] < time.time() or rr["attempts"] >= RESET_MAX_ATTEMPTS
                     or not hmac.compare_digest(rr["code_hash"], _reset_code_hash(uid, code))):
                 if rr:
-                    client.table("etti_password_resets").update({"attempts": rr["attempts"] + 1}) \
+                    client.table("liceu_password_resets").update({"attempts": rr["attempts"] + 1}) \
                         .eq("user_id", uid).execute()
                 _auth_note_fail(email)
                 return None, bad
@@ -1427,9 +1427,9 @@ def auth_reset_password(email: str, code: str, new_password: str) -> tuple[dict 
         if used_recovery:
             new_rec = _new_recovery_code()        # codul de recuperare e de unică folosință
             update["recovery_hash"] = _hash_password(_normalize_recovery(new_rec))
-        client.table("etti_users").update(update).eq("id", uid).execute()
-        client.table("etti_password_resets").delete().eq("user_id", uid).execute()
-        client.table("etti_tokens").delete().eq("user_id", uid).execute()   # deconectăm peste tot
+        client.table("liceu_users").update(update).eq("id", uid).execute()
+        client.table("liceu_password_resets").delete().eq("user_id", uid).execute()
+        client.table("liceu_tokens").delete().eq("user_id", uid).execute()   # deconectăm peste tot
         if used_recovery:
             st.session_state["_auth_new_recovery"] = new_rec
         return _public_user(row), ""
@@ -1444,7 +1444,7 @@ def auth_regenerate_recovery() -> bool:
         return False
     rec = _new_recovery_code()
     try:
-        get_supabase_client().table("etti_users").update(
+        get_supabase_client().table("liceu_users").update(
             {"recovery_hash": _hash_password(_normalize_recovery(rec))}).eq("id", uid).execute()
         st.session_state["_auth_new_recovery"] = rec
         return True
@@ -1461,7 +1461,7 @@ def _issue_remember_token(user_id: str) -> str | None:
     raw = secrets.token_urlsafe(32)
     now = time.time()
     try:
-        get_supabase_client().table("etti_tokens").insert({
+        get_supabase_client().table("liceu_tokens").insert({
             "token_hash": _token_hash(raw),
             "user_id": user_id,
             "created_at": now,
@@ -1481,18 +1481,18 @@ def _user_from_token(raw: str) -> dict | None:
     try:
         client = get_supabase_client()
         th = _token_hash(raw)
-        res = client.table("etti_tokens").select("user_id, expires_at").eq("token_hash", th).limit(1).execute()
+        res = client.table("liceu_tokens").select("user_id, expires_at").eq("token_hash", th).limit(1).execute()
         if not res.data or res.data[0]["expires_at"] < time.time():
             return None
-        u = client.table("etti_users").select("id, email, display_name") \
+        u = client.table("liceu_users").select("id, email, display_name") \
             .eq("id", res.data[0]["user_id"]).limit(1).execute()
         if not u.data:
             return None
         now = time.time()
-        client.table("etti_tokens").update({
+        client.table("liceu_tokens").update({
             "last_used": now, "expires_at": now + AUTH_TOKEN_DAYS * 86400,
         }).eq("token_hash", th).execute()
-        client.table("etti_users").update({"last_login": now}).eq("id", u.data[0]["id"]).execute()
+        client.table("liceu_users").update({"last_login": now}).eq("id", u.data[0]["id"]).execute()
         return _public_user(u.data[0])
     except Exception as e:
         _log("Restaurare login din token eșuată", "silent", e)
@@ -1515,8 +1515,8 @@ def _claim_browser_sessions(user_id: str):
     if not sids:
         return
     try:
-        get_supabase_client().table("sessions").update({"etti_user_id": user_id}) \
-            .in_("session_id", sids).is_("etti_user_id", "null").execute()
+        get_supabase_client().table("sessions").update({"liceu_user_id": user_id}) \
+            .in_("session_id", sids).is_("liceu_user_id", "null").execute()
     except Exception as e:
         _log("Atașarea conversațiilor la cont a eșuat", "silent", e)
 
@@ -1535,9 +1535,9 @@ def auth_logout(all_devices: bool = False):
     try:
         client = get_supabase_client()
         if user and all_devices:
-            client.table("etti_tokens").delete().eq("user_id", user["id"]).execute()
+            client.table("liceu_tokens").delete().eq("user_id", user["id"]).execute()
         elif raw:
-            client.table("etti_tokens").delete().eq("token_hash", _token_hash(raw)).execute()
+            client.table("liceu_tokens").delete().eq("token_hash", _token_hash(raw)).execute()
     except Exception as e:
         _log("Ștergere token la deconectare eșuată", "silent", e)
     st.session_state.pop("_auth_user", None)
@@ -1575,7 +1575,7 @@ def _fernet_for(tag: str):
         secret = "derived:" + str(st.secrets.get("SUPABASE_KEY", ""))
     if not secret or secret == "derived:":
         raise RuntimeError("Nu există niciun secret pentru criptarea cheilor")
-    raw = hashlib.sha256(b"profesor-etti-api-keys:" + secret.encode("utf-8")).digest()
+    raw = hashlib.sha256(b"profesor-liceu-api-keys:" + secret.encode("utf-8")).digest()
     return Fernet(_b64.urlsafe_b64encode(raw))
 
 
@@ -1607,7 +1607,7 @@ def acct_keys_load(force: bool = False) -> list:
         return cache["items"]
     items = []
     try:
-        res = get_supabase_client().table("etti_api_keys").select("id, label, key_enc, key_hint, created_at") \
+        res = get_supabase_client().table("liceu_api_keys").select("id, label, key_enc, key_hint, created_at") \
             .eq("user_id", uid).order("created_at").execute()
         for r in res.data or []:
             k = _decrypt_api_key(r["key_enc"])
@@ -1650,7 +1650,7 @@ def acct_key_add(label: str, key: str) -> tuple[bool, str]:
     if not ok:
         return False, note
     try:
-        get_supabase_client().table("etti_api_keys").insert({
+        get_supabase_client().table("liceu_api_keys").insert({
             "user_id": uid,
             "label": (label or "").strip()[:40] or f"Cheia {len(existing) + 1}",
             "key_enc": _encrypt_api_key(key),
@@ -1669,7 +1669,7 @@ def acct_key_delete(key_id: str):
     if not uid:
         return
     try:
-        get_supabase_client().table("etti_api_keys").delete().eq("id", key_id).eq("user_id", uid).execute()
+        get_supabase_client().table("liceu_api_keys").delete().eq("id", key_id).eq("user_id", uid).execute()
     except Exception as e:
         _log("Ștergerea cheii din cont a eșuat", "silent", e)
     acct_keys_load(force=True)
@@ -9536,10 +9536,10 @@ with st.sidebar:
         )
         if current_user_id():
             # Cu cont: toate conversațiile contului, de pe orice device
-            _q = _q.eq("etti_user_id", current_user_id())
+            _q = _q.eq("liceu_user_id", current_user_id())
         else:
             # Fără cont: doar conversațiile anonime ale acestui browser
-            _q = _q.in_("session_id", _my_sids).is_("etti_user_id", "null")
+            _q = _q.in_("session_id", _my_sids).is_("liceu_user_id", "null")
         _resp = _q.gt("msg_count", 0).order("last_active", desc=True).limit(30 if current_user_id() else 15).execute()
         sessions = _resp.data or []
     except Exception:

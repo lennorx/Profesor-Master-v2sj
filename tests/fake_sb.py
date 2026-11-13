@@ -1,7 +1,7 @@
 """Supabase simulat în memorie (suficient pentru aplicațiile Profesor)."""
 import copy, uuid
 
-DB = {"sessions": [], "history": [], "etti_users": [], "etti_tokens": [], "etti_password_resets": [], "etti_api_keys": []}
+DB = {"sessions": [], "history": [], "liceu_users": [], "liceu_tokens": [], "liceu_password_resets": [], "liceu_api_keys": []}
 _hid = [0]
 
 
@@ -17,7 +17,7 @@ def _previews():
         users = sorted(h["content"] for h in msgs if h["role"] == "user")
         out.append({"session_id": s["session_id"], "app_id": s.get("app_id"), "last_active": s["last_active"],
                     "msg_count": len(msgs), "preview": users[0][:60] if users else None,
-                    "etti_user_id": s.get("etti_user_id")})
+                    "liceu_user_id": s.get("liceu_user_id")})
     return out
 
 
@@ -55,9 +55,9 @@ class Q:
             return Resp(copy.deepcopy(match), len(match) if self._count else None)
         if self.op in ("insert", "upsert"):
             row = dict(self.payload)
-            if self.t == "etti_api_keys":
+            if self.t == "liceu_api_keys":
                 row.setdefault("id", str(uuid.uuid4()))
-            if self.t == "etti_users":
+            if self.t == "liceu_users":
                 row.setdefault("id", str(uuid.uuid4()))
                 if any(r["email"] == row["email"] for r in rows):
                     raise Exception("duplicate key value violates unique constraint")
@@ -73,7 +73,7 @@ class Q:
                     if self.op == "upsert":
                         ex[0].update(row); return Resp([ex[0]])
                     raise Exception("duplicate key")
-            if self.t == "etti_password_resets" and self.op == "upsert":
+            if self.t == "liceu_password_resets" and self.op == "upsert":
                 DB[self.t] = [r for r in rows if r["user_id"] != row["user_id"]]; rows = DB[self.t]
             rows.append(row)
             return Resp([copy.deepcopy(row)])

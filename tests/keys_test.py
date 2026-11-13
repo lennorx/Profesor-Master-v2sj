@@ -35,13 +35,13 @@ MAMA="AIzaMAMA000000000000000000000"; TATA="AIzaTATA000000000000000000000"; RAU=
 for lbl,k in (("Mama",MAMA),("Tata",TATA)):
     a.text_input(key="_acct_key_label").input(lbl); a.text_input(key="_acct_key_value").input(k); btn(a,"✅ Adaugă în cont").click().run()
     assert not a.exception,[e.value for e in a.exception]
-ok(len(DB["etti_api_keys"])==2, "2 chei salvate în cont")
-ok(all(r["key_enc"].startswith("d1:") and MAMA not in r["key_enc"] and TATA not in r["key_enc"] for r in DB["etti_api_keys"]), "cheile sunt criptate în DB")
-ok({r["label"] for r in DB["etti_api_keys"]}=={"Mama","Tata"} and {r["key_hint"] for r in DB["etti_api_keys"]}=={"0000"}, "etichete + ultimele 4 caractere")
+ok(len(DB["liceu_api_keys"])==2, "2 chei salvate în cont")
+ok(all(r["key_enc"].startswith("d1:") and MAMA not in r["key_enc"] and TATA not in r["key_enc"] for r in DB["liceu_api_keys"]), "cheile sunt criptate în DB")
+ok({r["label"] for r in DB["liceu_api_keys"]}=={"Mama","Tata"} and {r["key_hint"] for r in DB["liceu_api_keys"]}=={"0000"}, "etichete + ultimele 4 caractere")
 a.text_input(key="_acct_key_label").input("Unchiul"); a.text_input(key="_acct_key_value").input(RAU); btn(a,"✅ Adaugă în cont").click().run()
-ok(len(DB["etti_api_keys"])==2 and any("nu e validă" in e.value for e in a.error), "cheie invalidă respinsă (verificare la Google)")
+ok(len(DB["liceu_api_keys"])==2 and any("nu e validă" in e.value for e in a.error), "cheie invalidă respinsă (verificare la Google)")
 a.text_input(key="_acct_key_label").input("Iar mama"); a.text_input(key="_acct_key_value").input(MAMA); btn(a,"✅ Adaugă în cont").click().run()
-ok(len(DB["etti_api_keys"])==2, "duplicat respins")
+ok(len(DB["liceu_api_keys"])==2, "duplicat respins")
 ok(not any("Nicio cheie API" in e.value for e in a.error), "cu chei în cont aplicația funcționează")
 DAYX.add(MAMA); DAYX.add(TATA) if False else None
 a.session_state["key_index"]=0
@@ -53,8 +53,8 @@ b=app({"sid":"","known":[],"token":tok})
 ok(not any("Nicio cheie API" in e.value for e in b.error), "alt dispozitiv: cheile din cont merg după login automat")
 labels=" ".join(m.value for m in b.sidebar.markdown)
 ok("Mama" in labels and "Tata" in labels, "lista de chei apare pe al doilea dispozitiv")
-kid=DB["etti_api_keys"][0]["id"]
+kid=DB["liceu_api_keys"][0]["id"]
 b.button(key=f"_acct_key_del_{kid}").click().run()
-ok(len(DB["etti_api_keys"])==1, "ștergere cheie din cont")
+ok(len(DB["liceu_api_keys"])==1, "ștergere cheie din cont")
 btn(b,"🚪 Ieșire").click().run()
 ok(any("Nicio cheie API" in e.value for e in b.error), "după ieșire cheile contului nu mai sunt folosite")
